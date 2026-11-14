@@ -21,7 +21,9 @@ import {
 } from "@/lib/constants";
 import {
   addDays,
+  daysBetween,
   formatDayWithYear,
+  isDateString,
   isWeekStart,
   todayInTehran,
   weekStartOf,
@@ -319,7 +321,55 @@ export async function listDailyReportsForWeek(weekStart: string): Promise<DailyR
   return rows.map((row) => toDailyReport(row.report, { slug: row.slug, name: row.name }));
 }
 
+/**
+ * Reports in a date range, newest day first. For agents and other tools that
+ * want more than one week. The range is capped so one call stays small.
+ */
+export async function listDailyReports(options: {
+  from: string;
+  to: string;
+  person?: PersonSlug;
+  limit?: number;
+}): Promise<DailyReport[]> {
+  const { from, to, person, limit = 100 } = options;
+  if (!isDateString(from) || !isDateString(to)) {
+    throw new ValidationError({ from: ["Use real dates written like 2026-11-14."] });
+  }
+  if (to < from) throw new ValidationError({ to: ["The end date must not be before the start date."] });
+  if (daysBetween(from, to) > 92) {
+    throw new ValidationError({ to: ["Ask for at most about three months (92 days) at a time."] });
+  }
+  const rows = await getDb()
+    .select({ report: dailyReports, slug: people.slug, name: people.name })
+    .from(dailyReports)
+    .innerJoin(people, eq(dailyReports.personId, people.id))
+    .where(
+      and(
+        gte(dailyReports.reportDate, from),
+        lte(dailyReports.reportDate, to),
+        person ? eq(people.slug, person) : undefined,
+      ),
+    )
+    .orderBy(desc(dailyReports.reportDate), asc(people.slug))
+    .limit(Math.min(Math.max(limit, 1), 200));
+  return rows.map((row) => toDailyReport(row.report, { slug: row.slug, name: row.name }));
+}
+
 // --------------------------------------------------------------- decisions --
+
+/** Decisions by status. Open ones come oldest first, answered ones newest first. */
+export async function listDecisions(
+  options: { status?: DecisionStatus | "all"; limit?: number } = {},
+): Promise<Decision[]> {
+  const { status = "open", limit = 50 } = options;
+  const rows = await getDb()
+    .select()
+    .from(decisions)
+    .where(status === "all" ? undefined : eq(decisions.status, status))
+    .orderBy(status === "open" ? asc(decisions.raisedOn) : desc(decisions.raisedOn), asc(decisions.createdAt))
+    .limit(Math.min(Math.max(limit, 1), 200));
+  return rows.map(toDecision);
+}
 
 export async function raiseDecision(input: RaiseDecisionInput, ctx: Actor): Promise<Decision> {
   const data = raiseDecisionSchema.parse(input);
@@ -428,8 +478,19 @@ export async function listWeeklyReports(options: { before?: string; limit?: numb
  * numbers and the "waiting for a decision" list are worked out here from the
  * real reports and decisions, never typed in, so they cannot be invented.
  */
-export async function saveWeeklyReport(input: WeeklyReportInput, ctx: Actor): Promise<{ report: WeeklyReport; replaced: boolean }> {
-  const data = weeklyReportInputSchema.parse(input);
+export async function saveWeeklyReport(
+  input: WeeklyReportInput,
+  ctx: Actor,
+  options: {
+    /**
+     * For agents: the summary is always saved as a draft, and a summary a person
+     * has marked final cannot be changed. Only people finalise or reopen a week.
+     */
+    draftOnly?: boolean;
+  } = {},
+): Promise<{ report: WeeklyReport; replaced: boolean }> {
+  const parsed = weeklyReportInputSchema.parse(input);
+  const data = options.draftOnly ? { ...parsed, done: false } : parsed;
   const today = todayInTehran();
   if (data.weekStart > weekStartOf(today)) {
     throw new ValidationError({ weekStart: ["That week has not started yet. Pick this week or an earlier one."] });
@@ -466,10 +527,17 @@ export async function saveWeeklyReport(input: WeeklyReportInput, ctx: Actor): Pr
     };
 
     const [existing] = await tx
-      .select({ id: weeklyReports.id })
+      .select({ id: weeklyReports.id, done: weeklyReports.done })
       .from(weeklyReports)
       .where(eq(weeklyReports.weekStart, data.weekStart))
       .limit(1);
+    if (options.draftOnly && existing?.done) {
+      throw new ValidationError({
+        weekStart: [
+          "This week's summary is already marked final, so it cannot be changed from here. A person can reopen it on the website.",
+        ],
+      });
+    }
     const [row] = await tx
       .insert(weeklyReports)
       .values({ weekStart: data.weekStart, ...values })

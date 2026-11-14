@@ -3,11 +3,13 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ArrowLeftIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AgentGuide } from "@/components/page/agent-guide";
 import { SetupNotice } from "@/components/page/setup-notice";
 import { PERSON_SLUGS } from "@/lib/constants";
 import { databaseProblem } from "@/lib/db-errors";
 import { formatTehranDateTime } from "@/lib/dates";
 import { hasAdminAccess, requireSiteSession } from "@/server/auth";
+import { siteOrigin } from "@/server/origin";
 import { listApiTokens, listAuditLog, listPeople } from "@/server/reports";
 import { adminLogoutAction } from "./actions";
 import { AdminLoginForm } from "./admin-login-form";
@@ -76,6 +78,10 @@ async function AdminContent() {
           create it. You can switch it off at any time.
         </p>
         <TokensAdmin tokens={tokens} owners={owners} />
+        <div className="grid gap-4 rounded-2xl border bg-card p-5 shadow-sm">
+          <h3 className="text-lg font-semibold">Connect an agent</h3>
+          <AgentGuide origin={await siteOrigin()} audience="admin" />
+        </div>
       </section>
 
       <section aria-labelledby="audit-title" className="grid gap-3">

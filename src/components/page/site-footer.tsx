@@ -12,9 +12,14 @@ export function SiteFooter({ lastUpdated }: { lastUpdated: Date | null }) {
           </span>
           {lastUpdated ? " (Tehran time)" : ""}
         </p>
-        <Link href="/admin" className="font-medium text-primary underline underline-offset-4">
-          Admin
-        </Link>
+        <nav aria-label="More" className="flex flex-wrap gap-x-5 gap-y-1">
+          <a href="#agents" className="font-medium text-primary underline underline-offset-4">
+            Connect an agent
+          </a>
+          <Link href="/admin" className="font-medium text-primary underline underline-offset-4">
+            Admin
+          </Link>
+        </nav>
       </div>
     </footer>
   );

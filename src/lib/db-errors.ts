@@ -34,3 +34,47 @@ export function databaseProblem(error: unknown): DatabaseProblem | null {
   }
   return null;
 }
+
+/**
+ * Every message in an error and its causes, joined, so a script can show the real
+ * reason ("ECONNREFUSED", "password authentication failed") and not only the
+ * wrapper ("Failed query"). Error messages from the database driver never
+ * contain the password.
+ */
+export function describeError(error: unknown): string {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [error];
+  while (queue.length > 0 && seen.size < 12) {
+    const current = queue.shift();
+    if (typeof current !== "object" || current === null || seen.has(current)) continue;
+    seen.add(current);
+    const { code, message, cause, errors } = current as Errorish;
+    const text = typeof message === "string" ? message.split("\n")[0].trim() : "";
+    const label = typeof code === "string" ? `${code}${text ? `: ${text}` : ""}` : text;
+    if (label && !parts.includes(label)) parts.push(label);
+    queue.push(cause);
+    if (Array.isArray(errors)) queue.push(...errors);
+  }
+  return parts.join(" <- ") || String(error);
+}
+
+/** "host:port/database" of a connection string, without the user name or password. */
+export function describeTarget(connectionString: string | undefined): string {
+  if (!connectionString) return "no address (DATABASE_URL is empty)";
+  try {
+    const url = new URL(connectionString);
+    return `${url.hostname}:${url.port || "5432"}/${url.pathname.replace(/^\//, "")}`;
+  } catch {
+    return "an address that is not a valid connection string";
+  }
+}
+
+/** True when the address can only work on the developer's own computer. */
+export function isLocalAddress(connectionString: string | undefined): boolean {
+  try {
+    return /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(new URL(connectionString ?? "").hostname);
+  } catch {
+    return false;
+  }
+}

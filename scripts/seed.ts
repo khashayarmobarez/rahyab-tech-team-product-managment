@@ -12,6 +12,7 @@
 import "./env";
 import { eq } from "drizzle-orm";
 import { PERSON_SLUGS, type PersonSlug } from "../src/lib/constants";
+import { describeError, describeTarget } from "../src/lib/db-errors";
 import { addDays, previousWeekStart, todayInTehran, weekDays, weekStartOf } from "../src/lib/dates";
 import { closeDb, getDb } from "../src/server/db";
 import { decisions } from "../src/server/db/schema";
@@ -317,7 +318,9 @@ async function main(): Promise<void> {
       `Seed finished (today in Tehran: ${today}): 3 people, ${reports} daily reports, 2 weekly summaries, ${newDecisions} new decisions.`,
     );
   } catch (error) {
-    console.error("Seed failed:", error instanceof Error ? error.message : error);
+    console.error("Seed failed.");
+    console.error(`  Tried:  ${describeTarget(process.env.DATABASE_URL)}`);
+    console.error(`  Reason: ${describeError(error)}`);
     process.exitCode = 1;
   } finally {
     await closeDb();

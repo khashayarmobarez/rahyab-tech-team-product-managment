@@ -17,15 +17,17 @@ export const TOKEN_SCOPES = [
   "reports:read",
   "reports:write",
   "decisions:write",
+  "decisions:answer",
   "weekly:write",
 ] as const;
 export type TokenScope = (typeof TOKEN_SCOPES)[number];
 
 export const TOKEN_SCOPE_LABELS: Record<TokenScope, string> = {
-  "reports:read": "Read reports and decisions",
+  "reports:read": "Read reports, summaries and decisions",
   "reports:write": "Add daily reports",
-  "decisions:write": "Raise and answer decisions",
-  "weekly:write": "Write weekly summaries",
+  "decisions:write": "Raise decisions",
+  "decisions:answer": "Answer decisions (normally the CEO's call)",
+  "weekly:write": "Write weekly summaries (always saved as drafts)",
 };
 
 /** Written into a weekly report's by-person line when a person has nothing to say. */

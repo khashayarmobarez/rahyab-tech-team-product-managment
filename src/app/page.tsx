@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { DialogsProvider } from "@/components/forms/dialogs-provider";
+import { AgentSection } from "@/components/page/agent-section";
 import { DecisionsSection } from "@/components/page/decisions-section";
 import { PageSkeleton } from "@/components/page/page-skeleton";
 import { PastWeeks } from "@/components/page/past-weeks";
@@ -13,6 +14,7 @@ import { databaseProblem } from "@/lib/db-errors";
 import { formatWeekRange, todayInTehran, weekStartOf } from "@/lib/dates";
 import { parseWeekParam } from "@/lib/rules";
 import { requireSiteSession } from "@/server/auth";
+import { siteOrigin } from "@/server/origin";
 import {
   getLastUpdated,
   getWeeklyReport,
@@ -64,6 +66,7 @@ async function TeamReports({ searchParams }: Pick<PageProps<"/">, "searchParams"
     return <SetupNotice problem={problem} />;
   }
   const [people, dailyReports, weekly, decisionView, pastWeeks, weekOptions, lastUpdated] = data;
+  const origin = await siteOrigin();
 
   if (people.length === 0) {
     return (
@@ -111,6 +114,7 @@ async function TeamReports({ searchParams }: Pick<PageProps<"/">, "searchParams"
           names={names}
         />
         <PastWeeks weeks={pastWeeks} names={names} currentWeek={currentWeek} />
+        <AgentSection origin={origin} />
       </main>
       <SiteFooter lastUpdated={lastUpdated} />
     </DialogsProvider>
