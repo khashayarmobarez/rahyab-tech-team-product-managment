@@ -6,7 +6,7 @@ How Team Reports is put together, and why. For setup see the [README](../README.
 
 An internal site where the IT and software team's reports reach the CEO and each other. One page (`/`) shows the week; forms add daily reports, decisions and the weekly summary; `/admin` manages people and API tokens; AI agents can do the same things over MCP ([agent API](mcp.md)).
 
-Routes: `/` and `/admin`, plus `/login` and `/api/*` (`/api/mcp` for agents, `/api/digest` for the weekly email). Nothing else.
+Routes: `/`, `/admin` and `/docs` (a read-only "Guide your agent" page: standing instructions to paste, example requests, which token for which job, error table), plus `/login` and `/api/*` (`/api/mcp` for agents, `/api/digest` for the weekly email). Nothing else.
 
 ## The page, top to bottom
 

@@ -16,7 +16,10 @@ export function SiteFooter({ lastUpdated }: { lastUpdated: Date | null }) {
           <a href="#agents" className="font-medium text-primary underline underline-offset-4">
             Connect an agent
           </a>
-          <Link href="/admin" className="font-medium text-primary underline underline-offset-4">
+          <Link href="/docs" className="font-medium text-primary underline underline-offset-4">
+            Guide your agent
+          </Link>
+          <Link href="/admin"className="font-medium text-primary underline underline-offset-4">
             Admin
           </Link>
         </nav>

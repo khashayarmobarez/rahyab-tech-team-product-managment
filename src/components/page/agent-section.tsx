@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BotIcon } from "lucide-react";
 import { AgentGuide } from "./agent-guide";
 
@@ -24,6 +25,13 @@ export function AgentSection({ origin }: { origin: string }) {
         </summary>
         <div className="border-t p-5">
           <AgentGuide origin={origin} audience="team" />
+          <p className="mt-6">
+            Connected already?{" "}
+            <Link href="/docs" className="font-medium text-primary underline underline-offset-4">
+              Learn how to guide your agent
+            </Link>{" "}
+            with ready-to-paste instructions and example requests.
+          </p>
         </div>
       </details>
     </section>
