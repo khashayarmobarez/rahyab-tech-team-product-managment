@@ -7,16 +7,18 @@ import {
   parseAnswerDecisionForm,
   parseDailyForm,
   parseRaiseDecisionForm,
+  parseReviewForm,
   parseWeeklyForm,
 } from "@/lib/form-parsers";
-import { fieldErrorsOf, personSlugSchema } from "@/lib/schemas";
-import { requireSiteSession } from "@/server/auth";
+import { answererSchema, fieldErrorsOf, personSlugSchema } from "@/lib/schemas";
+import { getRole, requireSiteSession } from "@/server/auth";
 import {
   answerDecision,
   getDailyReport,
   getWeeklyReport,
   raiseDecision,
   saveDailyReport,
+  saveReportReview,
   saveWeeklyReport,
 } from "@/server/reports";
 
@@ -30,14 +32,23 @@ function toFailure(error: unknown): ActionResult<never> {
 
 /** For the audit log: the person picked in the form, as long as it is one of ours. */
 function actorOf(person: unknown): string {
-  const parsed = personSlugSchema.safeParse(person);
+  const parsed = answererSchema.safeParse(person);
   return parsed.success ? parsed.data : "unknown";
+}
+
+const CEO_CANNOT_WRITE = "You are signed in as the CEO. Reports, decisions and weekly summaries are written by the team.";
+
+/** Writing reports belongs to the team. A visitor signed in with the CEO password is refused. */
+async function refuseCeo(): Promise<ActionResult<never> | null> {
+  return (await getRole()) === "ceo" ? failure({}, CEO_CANNOT_WRITE) : null;
 }
 
 // ----------------------------------------------------------- daily report --
 
 export async function saveDailyReportAction(formData: FormData): Promise<ActionResult> {
   await requireSiteSession();
+  const refused = await refuseCeo();
+  if (refused) return refused;
   const input = parseDailyForm(formData);
   try {
     const { replaced } = await saveDailyReport(input, { actor: actorOf(input.person), source: "web" });
@@ -50,7 +61,7 @@ export async function saveDailyReportAction(formData: FormData): Promise<ActionR
 
 export type LoadedDailyReport =
   | { found: false }
-  | { found: true; title: string; summary: string; done: string[]; blockers: string[]; next: string[] };
+  | { found: true; title: string; project: string; summary: string; done: string[]; blockers: string[]; next: string[] };
 
 /** Used by the form to load an existing report when the person or date changes. */
 export async function loadDailyReportAction(person: string, reportDate: string): Promise<LoadedDailyReport> {
@@ -62,6 +73,7 @@ export async function loadDailyReportAction(person: string, reportDate: string):
   return {
     found: true,
     title: report.title,
+    project: report.project ?? "",
     summary: report.summary,
     done: report.done,
     blockers: report.blockers,
@@ -73,6 +85,8 @@ export async function loadDailyReportAction(person: string, reportDate: string):
 
 export async function raiseDecisionAction(formData: FormData): Promise<ActionResult> {
   await requireSiteSession();
+  const refused = await refuseCeo();
+  if (refused) return refused;
   const input = parseRaiseDecisionForm(formData);
   try {
     await raiseDecision(input, { actor: actorOf(input.person), source: "web" });
@@ -86,6 +100,10 @@ export async function raiseDecisionAction(formData: FormData): Promise<ActionRes
 export async function answerDecisionAction(formData: FormData): Promise<ActionResult> {
   await requireSiteSession();
   const input = parseAnswerDecisionForm(formData);
+  // The CEO always answers as the CEO. Nobody else may use that name.
+  const isCeo = (await getRole()) === "ceo";
+  if (isCeo) input.person = "ceo";
+  else if (input.person === "ceo") return failure({ person: ["Choose who you are"] });
   try {
     await answerDecision(input, { actor: actorOf(input.person), source: "web" });
     refresh();
@@ -101,6 +119,8 @@ export async function answerDecisionAction(formData: FormData): Promise<ActionRe
 
 export async function saveWeeklyReportAction(formData: FormData): Promise<ActionResult> {
   await requireSiteSession();
+  const refused = await refuseCeo();
+  if (refused) return refused;
   const input = parseWeeklyForm(formData);
   try {
     const { replaced } = await saveWeeklyReport(input, { actor: actorOf(input.person), source: "web" });
@@ -138,4 +158,24 @@ export async function loadWeeklyReportAction(weekStart: string): Promise<LoadedW
     label: report.label,
     done: report.done,
   };
+}
+
+// ------------------------------------------------------------- CEO review --
+
+/** The CEO marks a report seen and/or leaves a note. Only a visitor signed in with the CEO password may. */
+export async function reviewReportAction(formData: FormData): Promise<ActionResult> {
+  await requireSiteSession();
+  if ((await getRole()) !== "ceo") return failure({}, "Only the CEO can mark reports as seen or leave notes.");
+  const input = parseReviewForm(formData);
+  try {
+    await saveReportReview(input, { actor: "ceo", source: "web" });
+    refresh();
+    const noteOnly = input.note !== undefined;
+    return {
+      ok: true,
+      message: noteOnly ? (input.note === "" ? "Note removed." : "Note saved.") : input.seen ? "Marked as seen." : "Marked as not seen.",
+    };
+  } catch (error) {
+    return toFailure(error);
+  }
 }

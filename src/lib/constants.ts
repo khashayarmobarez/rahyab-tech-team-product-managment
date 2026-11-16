@@ -1,8 +1,14 @@
 export const PERSON_SLUGS = ["khashayar", "mahan", "hossein"] as const;
 export type PersonSlug = (typeof PERSON_SLUGS)[number];
 
+/** Who is looking at the site. The CEO sees everything, answers decisions and reviews reports; the team writes them. */
+export type Role = "team" | "ceo";
+
 export const STATUS_LABELS = ["green", "yellow", "red"] as const;
 export type StatusLabel = (typeof STATUS_LABELS)[number];
+
+/** Chart colour of each person (Tailwind class parts: bg-series-N). The order never changes. */
+export const PERSON_SERIES: Record<PersonSlug, 1 | 2 | 3> = { khashayar: 1, mahan: 2, hossein: 3 };
 
 export const DECISION_STATUSES = ["open", "answered"] as const;
 export type DecisionStatus = (typeof DECISION_STATUSES)[number];

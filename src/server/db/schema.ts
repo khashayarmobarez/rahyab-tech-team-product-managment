@@ -52,6 +52,8 @@ export const dailyReports = pgTable(
     reportDate: date("report_date", { mode: "string" }).notNull(),
     title: text("title").notNull(),
     summary: text("summary").notNull(),
+    /** The project or product this day's work belongs to, if the writer named one. */
+    project: text("project"),
     done: text("done").array().notNull().default([]),
     blockers: text("blockers").array().notNull().default([]),
     next: text("next").array().notNull().default([]),
@@ -62,6 +64,27 @@ export const dailyReports = pgTable(
     unique("daily_reports_person_date_unique").on(t.personId, t.reportDate),
     index("daily_reports_date_idx").on(t.reportDate),
   ],
+);
+
+/**
+ * The CEO's reaction to one person's report for one day. Kept apart from the
+ * report on purpose: saving a report again replaces it, but must not wipe this.
+ */
+export const reportReviews = pgTable(
+  "report_reviews",
+  {
+    id: id(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id),
+    reportDate: date("report_date", { mode: "string" }).notNull(),
+    seenAt: timestamp("seen_at", { withTimezone: true }),
+    note: text("note"),
+    noteAt: timestamp("note_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [unique("report_reviews_person_date_unique").on(t.personId, t.reportDate)],
 );
 
 export type WeeklyNumbers = {

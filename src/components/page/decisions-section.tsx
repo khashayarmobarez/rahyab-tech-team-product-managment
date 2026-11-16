@@ -4,6 +4,7 @@ import { formatDayWithYear } from "@/lib/dates";
 import { decisionAgeDays, describeAge } from "@/lib/rules";
 import type { Decision } from "@/server/reports";
 import { AnswerButton } from "./answer-button";
+import { DetailDialog } from "./detail-dialog";
 import { SectionHeading } from "./lists";
 
 type Props = {
@@ -31,33 +32,49 @@ export function DecisionsSection({ open, recentlyAnswered, asOf, names }: Props)
           Nothing is waiting for a decision.
         </p>
       ) : (
-        <ul className="grid gap-3">
-          {open.map((decision) => (
-            <li key={decision.id} className="grid gap-3 rounded-2xl border bg-card p-5 shadow-sm sm:grid-cols-[1fr_auto] sm:items-start sm:gap-6">
-              <div className="grid gap-2">
-                <h3 className="text-lg leading-snug font-semibold">{decision.title}</h3>
-                <p className="whitespace-pre-line">{decision.description}</p>
-                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
-                  <span>
-                    Raised by {whoIs(decision.raisedBy, names)} on {formatDayWithYear(decision.raisedOn)}
-                  </span>
-                  <span className="flex items-center gap-1.5 font-medium text-foreground">
-                    <ClockIcon aria-hidden className="size-4" />
-                    {describeAge(decisionAgeDays(decision.raisedOn, asOf))}
-                  </span>
-                </p>
-                {decision.status === "answered" && decision.answeredOn ? (
-                  <p className="rounded-lg bg-muted px-3 py-2">
-                    <span className="font-medium">Answered later, on {formatDayWithYear(decision.answeredOn)}: </span>
-                    {decision.answer}
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {open.map((decision) => {
+            const age = describeAge(decisionAgeDays(decision.raisedOn, asOf));
+            const raised = `Raised by ${whoIs(decision.raisedBy, names)} on ${formatDayWithYear(decision.raisedOn)}`;
+            return (
+              <li key={decision.id} className="grid h-60 grid-rows-[auto_1fr_auto] gap-3 rounded-2xl border bg-card p-4 shadow-sm">
+                <h3 className="line-clamp-2 text-xl leading-snug font-semibold text-balance">{decision.title}</h3>
+                <div className="min-h-0">
+                  <p className="line-clamp-3 text-muted-foreground">{decision.description}</p>
+                  <DetailDialog
+                    title={decision.title}
+                    subtitle={`${raised} · ${age}`}
+                    ariaLabel={`Read in full: ${decision.title}`}
+                    triggerClassName="mt-1 rounded-sm font-medium text-primary underline underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none"
+                    trigger="Read in full"
+                  >
+                    <div className="grid gap-4">
+                      <p className="whitespace-pre-line">{decision.description}</p>
+                      {decision.status === "answered" && decision.answeredOn ? (
+                        <p className="rounded-lg bg-muted px-3 py-2">
+                          <span className="font-medium">Answered later, on {formatDayWithYear(decision.answeredOn)}: </span>
+                          {decision.answer}
+                        </p>
+                      ) : null}
+                    </div>
+                  </DetailDialog>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="flex min-w-0 items-center gap-1.5 font-medium">
+                    <ClockIcon aria-hidden className="size-4 shrink-0" />
+                    <span className="truncate" title={raised}>
+                      {age}
+                    </span>
                   </p>
-                ) : null}
-              </div>
-              {decision.status === "open" ? (
-                <AnswerButton decision={{ id: decision.id, title: decision.title, description: decision.description }} />
-              ) : null}
-            </li>
-          ))}
+                  {decision.status === "open" ? (
+                    <AnswerButton decision={{ id: decision.id, title: decision.title, description: decision.description }} />
+                  ) : (
+                    <span className="text-muted-foreground">Answered later</span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
 

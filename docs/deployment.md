@@ -15,6 +15,8 @@ The site runs on Vercel with a Neon Postgres database. It also runs on any Node 
    | `SESSION_SECRET` | At least 32 random characters: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
 
    Do not reuse your local `.env.local` values.
+
+   Optional, for the CEO: `CEO_PASSWORD`, a third password. Signing in with it gives the CEO view (no report forms; can answer decisions, mark reports as seen and leave notes). Without it nobody can sign in as the CEO, and the "seen" and note buttons do not appear.
 4. **Set Node.js 22.x** under Settings → Build and Deployment → Node.js Version.
 5. **Deploy.** The build log should show "Database is up to date." and then the Next.js build.
 
@@ -23,6 +25,19 @@ The first deploy creates the tables and the three people (Khashayar, Mahan, Hoss
 ### First run
 
 Open the site and sign in with `SITE_PASSWORD`. Open `/admin` (link in the footer) and sign in with `ADMIN_PASSWORD` to rename people and create API tokens for agents. Share the address and team password with the team.
+
+## Weekly email for the CEO
+
+`vercel.json` runs `/api/digest` every Thursday at 16:30 UTC (20:00 Tehran time). It builds a short summary of the week (summary or "done so far", what needs attention, open decisions, topics by day, days reported) and emails it. It does nothing until these are set in Vercel (Production):
+
+| Name | Value |
+| --- | --- |
+| `CRON_SECRET` | A long random value. Vercel sends it to the route as a bearer token; anyone else gets 401. |
+| `RESEND_API_KEY` | An API key from resend.com. |
+| `DIGEST_FROM` | A sender on a domain verified in Resend, like `Team Reports <reports@your-domain.com>`. |
+| `DIGEST_TO` | The CEO's address. Several addresses can be separated by commas. |
+
+To see what would be sent without sending anything: `curl -H "Authorization: Bearer $CRON_SECRET" "https://your-site/api/digest?dry=1"`. Without the three email settings a real call answers with the names of the settings that are missing.
 
 ## How migrations run
 
@@ -75,4 +90,4 @@ npm run build
 npm start            # listens on port 3000; put it behind HTTPS
 ```
 
-Needs Node 22+, Postgres, and the variables `DATABASE_URL`, `SITE_PASSWORD`, `ADMIN_PASSWORD`, `SESSION_SECRET`. Login cookies are marked `secure` in production, so the site must be served over HTTPS. If several server instances run, the agent rate limits are counted per instance.
+Needs Node 22+, Postgres, and the variables `DATABASE_URL`, `SITE_PASSWORD`, `ADMIN_PASSWORD`, `SESSION_SECRET` (and optionally `CEO_PASSWORD`). The weekly email needs something to call `/api/digest` on a schedule; `vercel.json` only works on Vercel. Login cookies are marked `secure` in production, so the site must be served over HTTPS. If several server instances run, the agent rate limits are counted per instance.

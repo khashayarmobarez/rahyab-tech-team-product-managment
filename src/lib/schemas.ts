@@ -60,10 +60,20 @@ const plainLanguage = (text: string, context: z.RefinementCtx) => {
 
 // ------------------------------------------------------------------ daily report --
 
+/** A short project or product name. Optional: blank means "no project". */
+export const PROJECT_MAX = 60;
+export const projectInputSchema = z
+  .string({ error: "Project must be text" })
+  .trim()
+  .max(PROJECT_MAX, `Project must be ${PROJECT_MAX} characters or fewer`)
+  .optional();
+const projectField = projectInputSchema.transform((value) => (value ? value : null));
+
 export const dailyReportInputSchema = z.object({
   person: personSlugSchema,
   reportDate: dateField("Date"),
   title: requiredText("Title", 120),
+  project: projectField,
   summary: requiredText("Summary", 2000),
   done: lines("Done", { max: 20 }),
   blockers: lines("Blockers", { max: 20 }),
@@ -81,12 +91,28 @@ export const raiseDecisionSchema = z.object({
 });
 export type RaiseDecisionInput = z.input<typeof raiseDecisionSchema>;
 
+/** Someone who may record an answer: a team member, or the CEO signed in with the CEO password. */
+export const answererSchema = z.enum([...PERSON_SLUGS, "ceo"], { error: "Choose who you are" });
+
 export const answerDecisionSchema = z.object({
-  person: personSlugSchema,
+  person: answererSchema,
   decisionId: z.uuid({ error: "Pick a decision to answer" }),
   answer: requiredText("Answer", 2000),
 });
 export type AnswerDecisionInput = z.input<typeof answerDecisionSchema>;
+
+// ------------------------------------------------------------------ CEO review --
+
+export const NOTE_MAX = 1000;
+
+/** The CEO's reaction to one report: mark it seen (or not), and/or leave a note ("" clears it). */
+export const reviewReportSchema = z.object({
+  person: personSlugSchema,
+  reportDate: dateField("Date"),
+  seen: z.boolean().optional(),
+  note: z.string().trim().max(NOTE_MAX, `A note must be ${NOTE_MAX} characters or fewer`).optional(),
+});
+export type ReviewReportInput = z.input<typeof reviewReportSchema>;
 
 // ------------------------------------------------------------------ weekly report --
 

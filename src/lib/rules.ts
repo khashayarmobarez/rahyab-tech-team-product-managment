@@ -7,7 +7,7 @@ import {
   type PersonSlug,
   type StatusLabel,
 } from "./constants";
-import { addDays, daysBetween, isDateString, weekStartOf } from "./dates";
+import { addDays, daysBetween, isDateString, weekDays, weekStartOf } from "./dates";
 
 // ---------------------------------------------------------------- decisions --
 
@@ -152,6 +152,184 @@ export function summariseProgress(reports: ProgressReport[]): {
     doneSoFar,
     openBlockers,
   };
+}
+
+// --------------------------------------------------- "what we worked on" view --
+
+export type WorkFilter = {
+  /** One day of the week, or undefined for the whole week. */
+  day?: string;
+  person?: PersonSlug;
+  blockersOnly: boolean;
+  /** Words to look for across every week. When set, the week and day choices no longer apply. */
+  query?: string;
+};
+
+export const SEARCH_MIN = 2;
+export const SEARCH_MAX = 80;
+
+/** Reads ?q=. Spaces are tidied; anything shorter than two characters means "no search". */
+export function parseQueryParam(value: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const tidy = (raw ?? "").replace(/\s+/g, " ").trim().slice(0, SEARCH_MAX);
+  return tidy.length >= SEARCH_MIN ? tidy : undefined;
+}
+
+export type WorkView = "cards" | "list";
+
+/** Reads ?view=. Cards are the default. */
+export function parseViewParam(value: string | string[] | undefined): WorkView {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw === "list" ? "list" : "cards";
+}
+
+/** Reads ?day=. Only a real day inside the shown week counts; anything else means "whole week". */
+export function parseDayParam(value: string | string[] | undefined, weekStart: string): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw || !isDateString(raw)) return undefined;
+  return weekDays(weekStart).includes(raw) ? raw : undefined;
+}
+
+/** Reads ?person=. Unknown names mean "everyone". */
+export function parsePersonParam(value: string | string[] | undefined): PersonSlug | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return PERSON_SLUGS.find((slug) => slug === raw);
+}
+
+/** Reads ?blockers=1. */
+export function parseFlagParam(value: string | string[] | undefined): boolean {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw === "1";
+}
+
+export type FilterableReport = DatedReport & { blockers: string[] };
+
+/** Applies the day, person and "has blockers" choices. Keeps the incoming order. */
+export function filterReports<T extends FilterableReport>(reports: T[], filter: WorkFilter): T[] {
+  return reports.filter(
+    (r) =>
+      (filter.day === undefined || r.reportDate === filter.day) &&
+      (filter.person === undefined || r.personSlug === filter.person) &&
+      (!filter.blockersOnly || r.blockers.length > 0),
+  );
+}
+
+/** Groups reports under their day, newest day first. Keeps the order inside a day. */
+export function groupByDay<T extends { reportDate: string }>(reports: T[]): { date: string; reports: T[] }[] {
+  const groups = new Map<string, T[]>();
+  for (const report of reports) {
+    const list = groups.get(report.reportDate);
+    if (list) list.push(report);
+    else groups.set(report.reportDate, [report]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([date, list]) => ({ date, reports: list }));
+}
+
+export type DayCount = { date: string; byPerson: Record<PersonSlug, number>; total: number };
+
+/** How many reports each person filed on each of the given days (for the day chart and day picker). */
+export function dayCounts(reports: DatedReport[], days: string[]): DayCount[] {
+  return days.map((date) => {
+    const byPerson = Object.fromEntries(PERSON_SLUGS.map((slug) => [slug, 0])) as Record<PersonSlug, number>;
+    for (const r of reports) if (r.reportDate === date) byPerson[r.personSlug] += 1;
+    return { date, byPerson, total: PERSON_SLUGS.reduce((sum, slug) => sum + byPerson[slug], 0) };
+  });
+}
+
+/** The address of the page for a week and a set of choices. Defaults are left out so links stay short. */
+export function workHref(options: {
+  week: string;
+  currentWeek: string;
+  day?: string;
+  person?: PersonSlug;
+  blockersOnly?: boolean;
+  query?: string;
+  view?: WorkView;
+  /** Where on the page to land. */
+  anchor?: string;
+}): string {
+  const query = new URLSearchParams();
+  // A search covers every week, so it carries no week or day.
+  if (options.query) {
+    query.set("q", options.query);
+  } else {
+    if (options.week !== options.currentWeek) query.set("week", options.week);
+    if (options.day) query.set("day", options.day);
+  }
+  if (options.person) query.set("person", options.person);
+  if (options.blockersOnly) query.set("blockers", "1");
+  if (options.view === "list") query.set("view", "list");
+  const text = query.toString();
+  return `/${text ? `?${text}` : ""}${options.anchor ? `#${options.anchor}` : ""}`;
+}
+
+// --------------------------------------------------------- projects and blockers --
+
+export const NO_PROJECT = "No project";
+
+export type ProjectTotal = { name: string; reports: number; people: PersonSlug[]; tagged: boolean };
+
+/** How many reports each project got, biggest first. Reports with no project come last. Names match ignoring case. */
+export function projectTotals<T extends DatedReport & { project: string | null }>(reports: T[]): ProjectTotal[] {
+  const byKey = new Map<string, { name: string; reports: number; people: Set<PersonSlug> }>();
+  let untagged = 0;
+  const untaggedPeople = new Set<PersonSlug>();
+  for (const report of reports) {
+    const name = report.project?.trim();
+    if (!name) {
+      untagged += 1;
+      untaggedPeople.add(report.personSlug);
+      continue;
+    }
+    const key = name.toLowerCase();
+    const entry = byKey.get(key) ?? { name, reports: 0, people: new Set<PersonSlug>() };
+    entry.reports += 1;
+    entry.people.add(report.personSlug);
+    byKey.set(key, entry);
+  }
+  const tagged = [...byKey.values()]
+    .map((e) => ({ name: e.name, reports: e.reports, people: PERSON_SLUGS.filter((s) => e.people.has(s)), tagged: true }))
+    .sort((a, b) => b.reports - a.reports || a.name.localeCompare(b.name));
+  if (untagged > 0) {
+    tagged.push({
+      name: NO_PROJECT,
+      reports: untagged,
+      people: PERSON_SLUGS.filter((s) => untaggedPeople.has(s)),
+      tagged: false,
+    });
+  }
+  return tagged;
+}
+
+export type StuckBlocker = { personSlug: PersonSlug; text: string; days: number; since: string };
+
+function normaliseLine(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Blockers that keep coming back. A blocker counts when it is in the person's
+ * newest report (so it is still open) and the same words appeared on at least
+ * `minDays` different days. Pass the last couple of weeks of reports.
+ */
+export function stuckBlockers<T extends FilterableReport>(reports: T[], minDays = 3): StuckBlocker[] {
+  const result: StuckBlocker[] = [];
+  const latest = latestPerPerson(reports);
+  for (const slug of PERSON_SLUGS) {
+    const newest = latest[slug];
+    if (!newest) continue;
+    const mine = reports.filter((r) => r.personSlug === slug);
+    const seen = new Set<string>();
+    for (const blocker of newest.blockers) {
+      const key = normaliseLine(blocker);
+      if (key === "" || seen.has(key)) continue;
+      seen.add(key);
+      const dates = mine.filter((r) => r.blockers.some((b) => normaliseLine(b) === key)).map((r) => r.reportDate);
+      const days = new Set(dates).size;
+      if (days >= minDays) result.push({ personSlug: slug, text: blocker, days, since: [...dates].sort()[0] });
+    }
+  }
+  return result.sort((a, b) => b.days - a.days);
 }
 
 // ------------------------------------------------------------------- status --

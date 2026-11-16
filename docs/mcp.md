@@ -81,7 +81,7 @@ Dates are `YYYY-MM-DD` in Tehran time. All results are JSON in a text block. Pro
 
 | Tool | Input | Notes |
 | --- | --- | --- |
-| `save_daily_report` | `person?`, `reportDate?` (default today), `title`, `summary`, `done[]`, `blockers[]`, `next[]` | **Replaces** the person's report for that date. Send the whole report each time. No future dates. |
+| `save_daily_report` | `person?`, `reportDate?` (default today), `title`, `project?` (a short name, same spelling every day), `summary`, `done[]`, `blockers[]`, `next[]` | **Replaces** the person's report for that date. Send the whole report each time. No future dates. |
 | `raise_decision` | `person?`, `title`, `description` | Check `get_decisions` first to avoid duplicates. Dated today. |
 | `answer_decision` | `person?`, `decisionId`, `answer` | Only to record an answer a human gave. A decision can be answered once. |
 | `save_weekly_report` | `person?`, `weekStart?` (default current week), `oneLine`, `results[]` (1 to 5), `byPerson?` (`khashayar`, `mahan`, `hossein` lines), `notFinished[]`, `label` (`green`, `yellow`, `red`) | **Always saved as a draft.** There is no `done` input. Cannot change a summary a person already marked final. The numbers and the "waiting for a decision" list are computed from real data. |

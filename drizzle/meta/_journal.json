@@ -8,6 +8,13 @@
       "when": 1794653978993,
       "tag": "0000_nostalgic_ozymandias",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794664192415,
+      "tag": "0001_simple_giant_man",
+      "breakpoints": true
     }
   ]
 }

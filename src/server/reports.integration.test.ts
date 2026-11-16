@@ -40,7 +40,7 @@ describe.skipIf(!testUrl || unsafe)("service layer (needs TEST_DATABASE_URL)", (
 
   beforeEach(async () => {
     await db.execute(
-      sql.raw("TRUNCATE audit_log, api_tokens, decisions, weekly_reports, daily_reports, people RESTART IDENTITY CASCADE"),
+      sql.raw("TRUNCATE audit_log, api_tokens, decisions, weekly_reports, report_reviews, daily_reports, people RESTART IDENTITY CASCADE"),
     );
     await db.insert(tables.people).values([
       { slug: "khashayar", name: "Khashayar", active: true },
@@ -341,6 +341,82 @@ describe.skipIf(!testUrl || unsafe)("service layer (needs TEST_DATABASE_URL)", (
         .createApiToken({ owner: "team", name: "Nothing", scopes: [] }, { actor: "admin", source: "web" })
         .catch((e) => e);
       expect(fieldErrorsOf(error)?.scopes).toBeDefined();
+    });
+  });
+
+  describe("projects, search and CEO review", () => {
+    it("keeps a project on the report, and a blank project clears it", async () => {
+      await reports.saveDailyReport(report({ project: "  Online payments " }), web);
+      expect((await reports.getDailyReport("mahan", "2026-11-10"))?.project).toBe("Online payments");
+      await reports.saveDailyReport(report({ project: "" }), web);
+      expect((await reports.getDailyReport("mahan", "2026-11-10"))?.project).toBeNull();
+      const tooLong = await reports.saveDailyReport(report({ project: "x".repeat(61) }), web).catch((e) => e);
+      expect(fieldErrorsOf(tooLong)?.project).toBeDefined();
+    });
+
+    it("finds reports in any week by every word, in any field, newest first", async () => {
+      await reports.saveDailyReport(report({ reportDate: "2026-11-03", title: "Invoice screens", project: "Ledger" }), web);
+      await reports.saveDailyReport(report({ reportDate: "2026-11-10", title: "Reporting", done: ["Invoice export works"] }), web);
+      await reports.saveDailyReport(report({ reportDate: "2026-11-11", title: "Speed work", blockers: ["Waiting for the server"] }), web);
+
+      const invoice = await reports.searchDailyReports("invoice");
+      expect(invoice.map((r) => r.reportDate)).toEqual(["2026-11-10", "2026-11-03"]);
+      expect((await reports.searchDailyReports("INVOICE ledger")).map((r) => r.reportDate)).toEqual(["2026-11-03"]);
+      expect((await reports.searchDailyReports("waiting server")).map((r) => r.reportDate)).toEqual(["2026-11-11"]);
+      expect(await reports.searchDailyReports("nothing like this")).toEqual([]);
+    });
+
+    it("treats % and _ as plain characters in a search", async () => {
+      await reports.saveDailyReport(report({ title: "Raised the limit to 50% of budget" }), web);
+      await reports.saveDailyReport(report({ reportDate: "2026-11-11", title: "Something else entirely" }), web);
+      expect((await reports.searchDailyReports("50%")).map((r) => r.reportDate)).toEqual(["2026-11-10"]);
+      expect(await reports.searchDailyReports("%")).toHaveLength(1);
+      expect(await reports.searchDailyReports("_")).toEqual([]);
+    });
+
+    it("keeps the CEO's mark and note when the report is saved again", async () => {
+      await reports.saveDailyReport(report(), web);
+      const ceo = { actor: "ceo", source: "web" } as const;
+      await reports.saveReportReview({ person: "mahan", reportDate: "2026-11-10", seen: true }, ceo);
+      await reports.saveReportReview({ person: "mahan", reportDate: "2026-11-10", note: "Please add the cost" }, ceo);
+      await reports.saveDailyReport(report({ title: "Reporting screens (afternoon)" }), web);
+
+      const [review] = await reports.listReviews("2026-11-10", "2026-11-10");
+      expect(review.seenAt).toBeInstanceOf(Date);
+      expect(review.note).toBe("Please add the cost");
+
+      // Only the parts that are sent change; an empty note clears just the note.
+      await reports.saveReportReview({ person: "mahan", reportDate: "2026-11-10", note: "" }, ceo);
+      const [cleared] = await reports.listReviews("2026-11-10", "2026-11-10");
+      expect(cleared.note).toBeNull();
+      expect(cleared.seenAt).toBeInstanceOf(Date);
+      await reports.saveReportReview({ person: "mahan", reportDate: "2026-11-10", seen: false }, ceo);
+      expect((await reports.listReviews("2026-11-10", "2026-11-10"))[0].seenAt).toBeNull();
+    });
+
+    it("refuses a review of a report that does not exist, and writes an audit row for a real one", async () => {
+      const ceo = { actor: "ceo", source: "web" } as const;
+      const missing = await reports.saveReportReview({ person: "mahan", reportDate: "2026-11-10", seen: true }, ceo).catch((e) => e);
+      expect(missing).toBeInstanceOf(ValidationError);
+      await reports.saveDailyReport(report(), web);
+      await reports.saveReportReview({ person: "mahan", reportDate: "2026-11-10", seen: true }, ceo);
+      const [audit] = await db
+        .select()
+        .from(tables.auditLog)
+        .where(eq(tables.auditLog.action, "report_review.saved"));
+      expect(audit).toMatchObject({ actor: "ceo", source: "web" });
+      expect(audit.summary).toContain("marked Mahan's report");
+    });
+
+    it("lets the CEO answer a decision as the CEO", async () => {
+      const decision = await reports.raiseDecision({ person: "mahan", title: "Pick a date", description: "Two options." }, web);
+      const answered = await reports.answerDecision(
+        { person: "ceo", decisionId: decision.id, answer: "Go with the first." },
+        { actor: "ceo", source: "web" },
+      );
+      expect(answered).toMatchObject({ status: "answered", answer: "Go with the first." });
+      const [audit] = await db.select().from(tables.auditLog).where(eq(tables.auditLog.action, "decision.answered"));
+      expect(audit.summary).toBe("The CEO answered a decision: Pick a date");
     });
   });
 

@@ -40,6 +40,11 @@
   --status-red-bg: oklch(0.93 0.05 25);
   --status-red-fg: oklch(0.38 0.14 27);
   --status-red-dot: oklch(0.5 0.2 27);
+
+  /* One colour per person in the charts (blue, orange, violet). Checked for colour-blind safety. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #6250d6;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -72,6 +77,50 @@
     --status-red-bg: oklch(0.32 0.1 27);
     --status-red-fg: oklch(0.9 0.07 25);
     --status-red-dot: oklch(0.72 0.18 25);
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #9085e9;
+  }
+}
+
+/*
+ * Printing (or saving as a PDF) always uses the light colours on white, even when
+ * the screen is dark, so the page reads well on paper. The page hides what makes
+ * no sense on paper (buttons, filters, forms) with Tailwind's print: variant.
+ */
+@media print {
+  :root {
+    --background: #fff;
+    --foreground: #111;
+    --card: #fff;
+    --card-foreground: #111;
+    --muted: #f2f2f2;
+    --muted-foreground: #444;
+    --border: #bbb;
+    --input: #777;
+    --primary: #1d3f8f;
+    --primary-foreground: #fff;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #6250d6;
+    --status-green-bg: #dff5e1;
+    --status-green-fg: #1c5a26;
+    --status-green-dot: #2c9a3c;
+    --status-yellow-bg: #fbf0c4;
+    --status-yellow-fg: #6b4a00;
+    --status-yellow-dot: #c28a00;
+    --status-red-bg: #f9dcd9;
+    --status-red-fg: #8a1f17;
+    --status-red-dot: #d03b3b;
+  }
+  body {
+    background: #fff;
+    font-size: 12pt;
+  }
+  article,
+  section {
+    box-shadow: none !important;
   }
 }
 
@@ -104,6 +153,10 @@
   --color-status-red-bg: var(--status-red-bg);
   --color-status-red-fg: var(--status-red-fg);
   --color-status-red-dot: var(--status-red-dot);
+
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);

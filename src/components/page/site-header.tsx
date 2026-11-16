@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarCheckIcon, MessageSquarePlusIcon, NotebookPenIcon, PlusIcon } from "lucide-react";
+import { CalendarCheckIcon, LogOutIcon, MessageSquarePlusIcon, NotebookPenIcon, PlusIcon } from "lucide-react";
+import { logoutAction } from "@/app/login/actions";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,18 +12,20 @@ import {
 import { useDialogs } from "@/components/forms/dialogs-provider";
 
 const LINKS = [
-  { href: "#this-week", label: "This week" },
-  { href: "#by-person", label: "By person" },
+  { href: "#this-week", label: "Week" },
+  { href: "#glance", label: "Charts" },
+  { href: "#work", label: "Topics" },
   { href: "#decisions", label: "Decisions" },
   { href: "#past-weeks", label: "Past weeks" },
 ];
 
 /** Sticky header: section links, and the buttons that open the forms. */
 export function SiteHeader() {
-  const { openDailyReport, openRaiseDecision, openWeekly } = useDialogs();
+  const { openDailyReport, openRaiseDecision, openWeekly, role } = useDialogs();
+  const isCeo = role === "ceo";
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+    <header className="sticky top-0 z-40 border-b print:hidden bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-2">
         <a href="#top" className="text-lg font-semibold tracking-tight">
           Team Reports
@@ -43,8 +46,13 @@ export function SiteHeader() {
           ))}
         </nav>
 
+        <div className="flex items-center gap-2">
+        {isCeo ? (
+          <p className="rounded-full border border-input px-3 py-1 text-sm font-medium">CEO view</p>
+        ) : null}
+
         {/* Wide screens: the three buttons side by side. */}
-        <div className="hidden items-center gap-2 md:flex">
+        <div className={isCeo ? "hidden" : "hidden items-center gap-2 md:flex"}>
           <Button variant="default" onClick={openDailyReport}>
             <NotebookPenIcon aria-hidden data-icon="inline-start" />
             Add my report
@@ -60,7 +68,7 @@ export function SiteHeader() {
         </div>
 
         {/* Phones: one Add menu keeps the header short. */}
-        <div className="md:hidden">
+        <div className={isCeo ? "hidden" : "md:hidden"}>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="default" />}>
               <PlusIcon aria-hidden data-icon="inline-start" />
@@ -81,6 +89,14 @@ export function SiteHeader() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+
+        <form action={logoutAction}>
+          <Button type="submit" variant="ghost">
+            <LogOutIcon aria-hidden data-icon="inline-start" />
+            Sign out
+          </Button>
+        </form>
         </div>
       </div>
     </header>

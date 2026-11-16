@@ -22,6 +22,7 @@ import { decisionAgeDays, parseWeekParam, reportedDays, summariseProgress } from
 import {
   answerDecisionSchema,
   dailyReportInputSchema,
+  projectInputSchema,
   fieldErrorsOf,
   personSlugSchema,
   raiseDecisionSchema,
@@ -109,6 +110,7 @@ function dailyForAgent(r: DailyReport) {
     name: r.personName,
     date: r.reportDate,
     title: r.title,
+    project: r.project,
     summary: r.summary,
     done: r.done,
     blockers: r.blockers,
@@ -159,6 +161,9 @@ const dailyInput = {
   person: personSlugSchema.optional().describe("Who the report is for. Optional for a token that belongs to one person; required for a team token."),
   reportDate: dailyReportInputSchema.shape.reportDate.optional().describe(`${dateText} Defaults to today. Not in the future.`),
   title: dailyReportInputSchema.shape.title.describe("What the day was about, in a few words."),
+  project: projectInputSchema.describe(
+    "Optional. The project or product this day's work belongs to, as a short name (for example \"Online payments\"). Use the same spelling every day so the CEO can follow a project over time.",
+  ),
   summary: dailyReportInputSchema.shape.summary.describe("Two or three plain sentences."),
   done: dailyReportInputSchema.shape.done.describe("What was finished."),
   blockers: dailyReportInputSchema.shape.blockers.describe("Anything stopping the work. Empty if nothing."),

@@ -28,6 +28,12 @@ export function StatusChip({ label, className }: { label: StatusLabel; className
   );
 }
 
+/** Just the dot, for tight spaces such as under a chart column. The word is in the label and tooltip. */
+export function StatusDot({ label, className }: { label: StatusLabel; className?: string }) {
+  const name = STATUS_COPY[label].name;
+  return <span role="img" aria-label={name} title={name} className={cn("size-3 rounded-full", DOT[label], className)} />;
+}
+
 /** A neutral chip for things that are not a status, like "In progress" or "Draft". */
 export function NeutralChip({ children, className }: { children: React.ReactNode; className?: string }) {
   return (

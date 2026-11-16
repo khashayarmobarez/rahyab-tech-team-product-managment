@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import type { Role } from "@/lib/constants";
 import { Field, FormError, PersonField, fieldProps } from "./fields";
 import type { DecisionToAnswer, PersonOption } from "./types";
 import { useIdentity } from "./use-identity";
@@ -99,17 +100,19 @@ export function AnswerDecisionDialog({
   onOpenChange,
   people,
   decision,
+  role,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   people: PersonOption[];
   decision: DecisionToAnswer | null;
+  role: Role;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         {decision ? (
-          <AnswerDecisionForm people={people} decision={decision} onClose={() => onOpenChange(false)} />
+          <AnswerDecisionForm people={people} decision={decision} role={role} onClose={() => onOpenChange(false)} />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -119,10 +122,12 @@ export function AnswerDecisionDialog({
 function AnswerDecisionForm({
   people,
   decision,
+  role,
   onClose,
 }: {
   people: PersonOption[];
   decision: DecisionToAnswer;
+  role: Role;
   onClose: () => void;
 }) {
   const ID = "answer";
@@ -146,14 +151,18 @@ function AnswerDecisionForm({
       <form ref={formRef} onSubmit={onSubmit} onInput={onInput} noValidate className="grid gap-5">
         <FormError message={formError} />
         <input type="hidden" name="decisionId" value={decision.id} />
-        <PersonField
-          idPrefix={ID}
-          people={people}
-          value={person}
-          onChange={choosePerson}
-          errors={errors}
-          label="Who is recording this answer?"
-        />
+        {role === "ceo" ? (
+          <input type="hidden" name="person" value="ceo" />
+        ) : (
+          <PersonField
+            idPrefix={ID}
+            people={people}
+            value={person}
+            onChange={choosePerson}
+            errors={errors}
+            label="Who is recording this answer?"
+          />
+        )}
         <Field id={`${ID}-answer`} label="Answer" hint="What was decided, and anything the team should do next." errors={errors.answer}>
           <Textarea
             {...fieldProps(`${ID}-answer`, "answer", errors.answer, true)}

@@ -209,6 +209,16 @@ describe.skipIf(!testUrl || unsafe)("MCP endpoint (needs TEST_DATABASE_URL)", ()
       ]);
     });
 
+    it("takes an optional project name and returns it with the report", async () => {
+      const client = await connect(await tokenFor("mahan", everything));
+      const tagged = await call(client, "save_daily_report", { ...report, project: "Online payments" });
+      expect(tagged.json.report.project).toBe("Online payments");
+      const plain = await call(client, "save_daily_report", { ...report, reportDate: "2026-11-09" });
+      expect(plain.json.report.project).toBeNull();
+      const { json } = await call(client, "get_daily_reports", { from: "2026-11-09", to: "2026-11-10" });
+      expect(json.reports.map((r: { project: string | null }) => r.project)).toEqual(["Online payments", null]);
+    });
+
     it("defaults the date to today", async () => {
       const client = await connect(await tokenFor("mahan", everything));
       const { json } = await call(client, "save_daily_report", { title: "Today", summary: "Worked.", done: [], blockers: [], next: [] });

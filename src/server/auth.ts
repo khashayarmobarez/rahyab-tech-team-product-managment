@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { connection } from "next/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { Role } from "@/lib/constants";
 import {
   SESSION_COOKIES,
   SESSION_TTL_SECONDS,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/session";
 
 /** Where each cookie is sent. The admin cookie only travels to /admin. */
-const COOKIE_PATH: Record<SessionKind, string> = { site: "/", admin: "/admin" };
+const COOKIE_PATH: Record<SessionKind, string> = { site: "/", admin: "/admin", ceo: "/" };
 
 function sessionSecret(): string {
   const secret = process.env.SESSION_SECRET;
@@ -25,7 +26,13 @@ function sessionSecret(): string {
 const PASSWORD_VARIABLES: Record<SessionKind, string> = {
   site: "SITE_PASSWORD",
   admin: "ADMIN_PASSWORD",
+  ceo: "CEO_PASSWORD",
 };
+
+/** The CEO password is optional. Without it nobody can sign in as the CEO. */
+export function ceoPasswordConfigured(): boolean {
+  return Boolean(process.env.CEO_PASSWORD);
+}
 
 /** Compares a typed password with the one in the environment, in constant time. */
 export function passwordMatches(kind: SessionKind, typed: string): boolean {
@@ -63,6 +70,11 @@ export async function hasSession(kind: SessionKind): Promise<boolean> {
 /** Pages and actions call this. The proxy checks too, but it is not the only guard. */
 export async function requireSiteSession(): Promise<void> {
   if (!(await hasSession("site"))) redirect("/login");
+}
+
+/** "ceo" for a visitor who signed in with the CEO password, otherwise "team". */
+export async function getRole(): Promise<Role> {
+  return (await hasSession("ceo")) ? "ceo" : "team";
 }
 
 /** True when the visitor has signed in to the site and then to /admin. */

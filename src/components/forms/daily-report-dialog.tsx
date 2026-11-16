@@ -26,16 +26,18 @@ export function DailyReportDialog({
   onOpenChange,
   people,
   today,
+  projects,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   people: PersonOption[];
   today: string;
+  projects: string[];
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
-        <DailyReportForm people={people} today={today} onClose={() => onOpenChange(false)} />
+        <DailyReportForm people={people} today={today} projects={projects} onClose={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );
@@ -47,15 +49,18 @@ type Existing = Extract<LoadedDailyReport, { found: true }>;
 function DailyReportForm({
   people,
   today,
+  projects,
   onClose,
 }: {
   people: PersonOption[];
   today: string;
+  projects: string[];
   onClose: () => void;
 }) {
   const [person, choosePerson] = useIdentity(people);
   const [reportDate, setReportDate] = useState(today);
   const [title, setTitle] = useState("");
+  const [project, setProject] = useState("");
   const [summary, setSummary] = useState("");
   const [done, setDone] = useState<string[]>([""]);
   const [blockers, setBlockers] = useState<string[]>([""]);
@@ -78,6 +83,7 @@ function DailyReportForm({
 
     function fill(existing: Existing) {
       setTitle(existing.title);
+      setProject(existing.project);
       setSummary(existing.summary);
       setDone(existing.done.length > 0 ? existing.done : [""]);
       setBlockers(existing.blockers.length > 0 ? existing.blockers : [""]);
@@ -85,6 +91,7 @@ function DailyReportForm({
     }
     function clear() {
       setTitle("");
+      setProject("");
       setSummary("");
       setDone([""]);
       setBlockers([""]);
@@ -157,6 +164,26 @@ function DailyReportForm({
             maxLength={200}
             onChange={(event) => setTitle(event.target.value)}
           />
+        </Field>
+
+        <Field
+          id={`${ID}-project`}
+          label="Project (optional)"
+          hint="The project or product this is for. Use the same name every day so the CEO can follow it."
+          errors={errors.project}
+        >
+          <Input
+            {...fieldProps(`${ID}-project`, "project", errors.project, false)}
+            value={project}
+            maxLength={80}
+            list={`${ID}-projects`}
+            onChange={(event) => setProject(event.target.value)}
+          />
+          <datalist id={`${ID}-projects`}>
+            {projects.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
         </Field>
 
         <Field id={`${ID}-summary`} label="Summary" hint="Two or three sentences anyone on the team can follow." errors={errors.summary}>

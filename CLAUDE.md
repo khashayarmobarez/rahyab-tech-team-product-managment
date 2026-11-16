@@ -26,7 +26,7 @@ docker compose up -d   # local Postgres (needs Docker Desktop running)
 - **Validation is shared.** The web forms and the MCP tools use the same schemas in `src/lib/schemas.ts`. Messages are written for the person filling in the form.
 - **All date logic is in `src/lib/dates.ts`.** Dates are calendar days in Asia/Tehran (`YYYY-MM-DD`, UTC+3:30, no DST). A week runs Saturday to Thursday; Friday is the day off and belongs to the week that just ended. No `new Date()` or `toLocaleDateString` for calendar days elsewhere.
 - `src/lib/` is pure (no database, no `server-only`): client components and the proxy import it.
-- Routes are only `/`, `/admin`, `/login` and `/api/*` (`/api/mcp` is the only API route).
+- Routes are only `/`, `/admin`, `/login` and `/api/*` (`/api/mcp` is for agents, `/api/digest` is for the weekly-email scheduler).
 
 ## Product rules
 
@@ -35,6 +35,8 @@ docker compose up -d   # local Postgres (needs Docker Desktop running)
 - **Agents (MCP) save weekly summaries only as drafts and can never change a final one.** `answer_decision` has its own permission (`decisions:answer`). A token that belongs to a person writes only as that person; a team token must name the person.
 - The team password is shared, so "Who are you?" in the forms is a trusted-team identity, not security. `/admin` needs a second password.
 - Tokens: only the SHA-256 hash is stored; the plain token is shown once.
+- **Two kinds of visitor.** `SITE_PASSWORD` = the team. `CEO_PASSWORD` (optional) = the CEO: no report, decision or weekly forms, but can answer decisions (as "ceo"), mark reports seen and leave notes. The role is checked in the server actions (`refuseCeo`, `reviewReportAction`), not just hidden in the UI. The CEO's mark and note live in `report_reviews`, apart from the report, because saving a report replaces it.
+- A daily report has an optional `project` name. The page shows what the CEO needs without hunting: topics as small same-size boxes, days that fold, a list view, search across all weeks, "Needs attention" (a blocker repeated on 3+ days, decisions waiting over 2 days), charts, and a print view.
 
 ## UI rules
 

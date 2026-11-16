@@ -12,6 +12,7 @@ import type {
   CreateTokenInput,
   DailyReportInput,
   RaiseDecisionInput,
+  ReviewReportInput,
   UpdatePersonInput,
   WeeklyReportInput,
 } from "./schemas";
@@ -30,6 +31,7 @@ export function parseDailyForm(form: FormData): DailyReportInput {
     person: text(form, "person") as DailyReportInput["person"],
     reportDate: text(form, "reportDate"),
     title: text(form, "title"),
+    project: text(form, "project"),
     summary: text(form, "summary"),
     done: list(form, "done"),
     blockers: list(form, "blockers"),
@@ -50,6 +52,18 @@ export function parseAnswerDecisionForm(form: FormData): AnswerDecisionInput {
     person: text(form, "person") as AnswerDecisionInput["person"],
     decisionId: text(form, "decisionId"),
     answer: text(form, "answer"),
+  };
+}
+
+export function parseReviewForm(form: FormData): ReviewReportInput {
+  const seen = form.get("seen");
+  const note = form.get("note");
+  return {
+    person: text(form, "person") as ReviewReportInput["person"],
+    reportDate: text(form, "reportDate"),
+    // Each part is only sent when the CEO touched it, so an absent field means "leave as it is".
+    ...(seen === "1" || seen === "0" ? { seen: seen === "1" } : {}),
+    ...(typeof note === "string" ? { note } : {}),
   };
 }
 

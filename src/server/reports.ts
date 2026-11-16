@@ -11,7 +11,7 @@
  * `fieldErrorsOf` from "@/lib/schemas" to turn either into field messages.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { and, asc, desc, eq, gte, isNull, lt, lte, max, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNull, lt, lte, max, or, sql } from "drizzle-orm";
 import {
   type AuditSource,
   type DecisionStatus,
@@ -36,12 +36,14 @@ import {
   createTokenSchema,
   dailyReportInputSchema,
   raiseDecisionSchema,
+  reviewReportSchema,
   updatePersonSchema,
   weeklyReportInputSchema,
   type AnswerDecisionInput,
   type CreateTokenInput,
   type DailyReportInput,
   type RaiseDecisionInput,
+  type ReviewReportInput,
   type UpdatePersonInput,
   type WeeklyReportInput,
 } from "@/lib/schemas";
@@ -52,6 +54,7 @@ import {
   dailyReports,
   decisions,
   people,
+  reportReviews,
   weeklyReports,
   type WeeklyNumbers,
 } from "./db/schema";
@@ -71,11 +74,22 @@ export type DailyReport = {
   personName: string;
   reportDate: string;
   title: string;
+  /** The project the day's work belongs to, or null. */
+  project: string | null;
   summary: string;
   done: string[];
   blockers: string[];
   next: string[];
   updatedAt: Date;
+};
+
+/** What the CEO did with one person's report for one day. */
+export type ReportReview = {
+  personSlug: PersonSlug;
+  reportDate: string;
+  seenAt: Date | null;
+  note: string | null;
+  noteAt: Date | null;
 };
 
 export type WeeklyReport = {
@@ -193,6 +207,7 @@ function toDailyReport(row: typeof dailyReports.$inferSelect, person: Pick<Perso
     personName: person.name,
     reportDate: row.reportDate,
     title: row.title,
+    project: row.project,
     summary: row.summary,
     done: row.done,
     blockers: row.blockers,
@@ -271,6 +286,7 @@ export async function saveDailyReport(
 
     const values = {
       title: data.title,
+      project: data.project,
       summary: data.summary,
       done: data.done,
       blockers: data.blockers,
@@ -355,6 +371,124 @@ export async function listDailyReports(options: {
   return rows.map((row) => toDailyReport(row.report, { slug: row.slug, name: row.name }));
 }
 
+/** Escapes the characters that ILIKE treats as wildcards, so a search for "50%" means 50%. */
+function likePattern(text: string): string {
+  return `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
+export const SEARCH_LIMIT = 60;
+
+/**
+ * Looks for every word in the title, project, summary and the done, blocker and
+ * next lines, across all weeks. Newest first, at most SEARCH_LIMIT.
+ */
+export async function searchDailyReports(query: string): Promise<DailyReport[]> {
+  const words = query
+    .split(/\s+/)
+    .filter((w) => w.length > 0)
+    .slice(0, 6);
+  if (words.length === 0) return [];
+  const wordMatches = words.map((word) => {
+    const pattern = likePattern(word);
+    return or(
+      ilike(dailyReports.title, pattern),
+      ilike(dailyReports.summary, pattern),
+      ilike(dailyReports.project, pattern),
+      ilike(sql`array_to_string(${dailyReports.done}, ' ')`, pattern),
+      ilike(sql`array_to_string(${dailyReports.blockers}, ' ')`, pattern),
+      ilike(sql`array_to_string(${dailyReports.next}, ' ')`, pattern),
+    );
+  });
+  const rows = await getDb()
+    .select({ report: dailyReports, slug: people.slug, name: people.name })
+    .from(dailyReports)
+    .innerJoin(people, eq(dailyReports.personId, people.id))
+    .where(and(...wordMatches))
+    .orderBy(desc(dailyReports.reportDate), asc(people.slug))
+    .limit(SEARCH_LIMIT);
+  return rows.map((row) => toDailyReport(row.report, { slug: row.slug, name: row.name }));
+}
+
+// ----------------------------------------------------------------- reviews --
+
+/** The CEO's marks and notes on reports between two days (inclusive). */
+export async function listReviews(from: string, to: string): Promise<ReportReview[]> {
+  if (!isDateString(from) || !isDateString(to)) return [];
+  const rows = await getDb()
+    .select({ review: reportReviews, slug: people.slug })
+    .from(reportReviews)
+    .innerJoin(people, eq(reportReviews.personId, people.id))
+    .where(and(gte(reportReviews.reportDate, from), lte(reportReviews.reportDate, to)));
+  return rows.map(({ review, slug }) => ({
+    personSlug: slug,
+    reportDate: review.reportDate,
+    seenAt: review.seenAt,
+    note: review.note,
+    noteAt: review.noteAt,
+  }));
+}
+
+/**
+ * The CEO marks a report seen (or not seen) and/or leaves a note. Only the parts
+ * that are sent change: an empty note clears it. The report has to exist.
+ */
+export async function saveReportReview(input: ReviewReportInput, ctx: Actor): Promise<ReportReview> {
+  const data = reviewReportSchema.parse(input);
+  return getDb().transaction(async (tx) => {
+    const [person] = await tx.select().from(people).where(eq(people.slug, data.person)).limit(1);
+    const [report] = person
+      ? await tx
+          .select({ id: dailyReports.id })
+          .from(dailyReports)
+          .where(and(eq(dailyReports.personId, person.id), eq(dailyReports.reportDate, data.reportDate)))
+          .limit(1)
+      : [];
+    if (!person || !report) {
+      throw new ValidationError({ _form: ["That report no longer exists."] });
+    }
+
+    const now = new Date();
+    const changes: Partial<typeof reportReviews.$inferInsert> = {};
+    if (data.seen !== undefined) changes.seenAt = data.seen ? now : null;
+    if (data.note !== undefined) {
+      changes.note = data.note === "" ? null : data.note;
+      changes.noteAt = data.note === "" ? null : now;
+    }
+    const [row] = await tx
+      .insert(reportReviews)
+      .values({ personId: person.id, reportDate: data.reportDate, ...changes })
+      .onConflictDoUpdate({
+        target: [reportReviews.personId, reportReviews.reportDate],
+        set: { ...changes, updatedAt: now },
+      })
+      .returning();
+
+    const day = formatDayWithYear(data.reportDate);
+    const summary =
+      data.note !== undefined
+        ? data.note === ""
+          ? `The CEO removed a note from ${person.name}'s report for ${day}`
+          : `The CEO left a note on ${person.name}'s report for ${day}`
+        : data.seen
+          ? `The CEO marked ${person.name}'s report for ${day} as seen`
+          : `The CEO marked ${person.name}'s report for ${day} as not seen`;
+    await writeAudit(tx, ctx, {
+      action: "report_review.saved",
+      entity: "daily_report",
+      entityId: report.id,
+      summary,
+      details: { person: person.slug, reportDate: data.reportDate, seen: data.seen, noteChanged: data.note !== undefined },
+    });
+    return {
+      personSlug: person.slug,
+      reportDate: row.reportDate,
+      seenAt: row.seenAt,
+      note: row.note,
+      noteAt: row.noteAt,
+    };
+  });
+}
+
 // --------------------------------------------------------------- decisions --
 
 /** Decisions by status. Open ones come oldest first, answered ones newest first. */
@@ -399,7 +533,9 @@ export async function raiseDecision(input: RaiseDecisionInput, ctx: Actor): Prom
 export async function answerDecision(input: AnswerDecisionInput, ctx: Actor): Promise<Decision> {
   const data = answerDecisionSchema.parse(input);
   return getDb().transaction(async (tx) => {
-    const person = await requireActivePerson(tx, data.person);
+    // The CEO is not one of the three people, so there is nobody to look up.
+    const answeredBy =
+      data.person === "ceo" ? { slug: "ceo", name: "The CEO" } : await requireActivePerson(tx, data.person);
     // The status check is part of the update, so two people answering at the
     // same moment cannot both succeed.
     const [row] = await tx
@@ -421,8 +557,8 @@ export async function answerDecision(input: AnswerDecisionInput, ctx: Actor): Pr
       action: "decision.answered",
       entity: "decision",
       entityId: row.id,
-      summary: `${person.name} answered a decision: ${row.title}`,
-      details: { answeredBy: person.slug },
+      summary: `${answeredBy.name} answered a decision: ${row.title}`,
+      details: { answeredBy: answeredBy.slug },
     });
     return toDecision(row);
   });

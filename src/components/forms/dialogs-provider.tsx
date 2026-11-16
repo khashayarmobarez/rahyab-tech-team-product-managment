@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import type { PersonSlug } from "@/lib/constants";
+import type { PersonSlug, Role } from "@/lib/constants";
 import { DailyReportDialog } from "./daily-report-dialog";
 import { AnswerDecisionDialog, RaiseDecisionDialog } from "./decision-dialogs";
 import type { DecisionToAnswer, PersonOption } from "./types";
@@ -15,6 +15,8 @@ type Open =
   | null;
 
 type DialogActions = {
+  /** Who is looking: the CEO cannot write reports, so the header hides those buttons. */
+  role: Role;
   openDailyReport: () => void;
   openRaiseDecision: () => void;
   openWeekly: () => void;
@@ -39,6 +41,8 @@ export function DialogsProvider({
   today,
   currentWeek,
   weekOptions,
+  role,
+  projects,
   children,
 }: {
   people: PersonOption[];
@@ -46,6 +50,9 @@ export function DialogsProvider({
   today: string;
   currentWeek: string;
   weekOptions: string[];
+  role: Role;
+  /** Project names already used, offered as suggestions in the report form. */
+  projects: string[];
   children: ReactNode;
 }) {
   const [open, setOpen] = useState<Open>(null);
@@ -54,6 +61,7 @@ export function DialogsProvider({
 
   const actions = useMemo<DialogActions>(
     () => ({
+      role,
       openDailyReport: () => setOpen({ kind: "daily" }),
       openRaiseDecision: () => setOpen({ kind: "raise" }),
       openWeekly: () => setOpen({ kind: "weekly" }),
@@ -62,7 +70,7 @@ export function DialogsProvider({
         setOpen({ kind: "answer", decision });
       },
     }),
-    [],
+    [role],
   );
   const close = useCallback(() => setOpen(null), []);
 
@@ -74,6 +82,7 @@ export function DialogsProvider({
         onOpenChange={(next) => !next && close()}
         people={people}
         today={today}
+        projects={projects}
       />
       <RaiseDecisionDialog open={open?.kind === "raise"} onOpenChange={(next) => !next && close()} people={people} />
       <AnswerDecisionDialog
@@ -81,6 +90,7 @@ export function DialogsProvider({
         onOpenChange={(next) => !next && close()}
         people={people}
         decision={open?.kind === "answer" ? open.decision : lastDecision}
+        role={role}
       />
       <WeeklyDialog
         open={open?.kind === "weekly"}

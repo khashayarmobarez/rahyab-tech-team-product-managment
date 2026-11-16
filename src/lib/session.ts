@@ -4,17 +4,20 @@
  * HMAC-SHA-256 over `kind.expiry` made with SESSION_SECRET.
  */
 
-export type SessionKind = "site" | "admin";
+/** "ceo" is an extra cookie on top of "site": it marks a visitor who signed in with the CEO password. */
+export type SessionKind = "site" | "admin" | "ceo";
 
 export const SESSION_COOKIES: Record<SessionKind, string> = {
   site: "tr_site",
   admin: "tr_admin",
+  ceo: "tr_ceo",
 };
 
 /** How long each kind of session lasts, in seconds. */
 export const SESSION_TTL_SECONDS: Record<SessionKind, number> = {
   site: 60 * 60 * 24 * 30,
   admin: 60 * 60 * 8,
+  ceo: 60 * 60 * 24 * 30,
 };
 
 const encoder = new TextEncoder();

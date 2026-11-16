@@ -6,7 +6,20 @@ How Team Reports is put together, and why. For setup see the [README](../README.
 
 An internal site where the IT and software team's reports reach the CEO and each other. One page (`/`) shows the week; forms add daily reports, decisions and the weekly summary; `/admin` manages people and API tokens; AI agents can do the same things over MCP ([agent API](mcp.md)).
 
-Routes: `/` and `/admin`, plus `/login` and `/api/*` (`/api/mcp` is the only API route). Nothing else.
+Routes: `/` and `/admin`, plus `/login` and `/api/*` (`/api/mcp` for agents, `/api/digest` for the weekly email). Nothing else.
+
+## The page, top to bottom
+
+| Section | Component | What it shows |
+| --- | --- | --- |
+| Week | `week-hero.tsx` | The weekly summary, or "Week in progress" built from the daily reports. Week picker. |
+| Needs attention | `attention-banner.tsx` | Only on the current week, and only when there is something: a blocker that is in someone's newest report and was repeated on 3 or more days (`stuckBlockers`), and decisions open more than 2 days. |
+| At a glance | `glance-section.tsx` | Four charts of the same size, foldable: reports each day (click a day to filter the topics), days reported in the last 8 weeks (dot = how the week ended), reports per project over four weeks, and how long each open decision has waited. Plain HTML, no chart library. |
+| What we worked on | `work-section.tsx` | Daily reports as **topics**. Cards (144px, topic as the title) or a one-line list. Days are folded: a busy week opens only the newest day, and a folded day still names its topics on one line. Details open in a dialog (`detail-dialog.tsx`) with the CEO's seen mark and note (`review-box.tsx`). Choices: day or whole week, person, only blockers. A search box (`work-tools.tsx`) looks through every week. "Print this view" prints every report in full on white (print rules in `globals.css`, `print:` classes). |
+| Needs a decision | `decisions-section.tsx` | Fixed-size boxes; the full text opens with "Read in full". |
+| Past weeks | `past-weeks.tsx` | Earlier weekly summaries. |
+
+The choices in "What we worked on" live in the address (`?day=`, `?person=`, `?blockers=1`, `?q=` for a search, `?view=list`, next to `?week=`), so a view can be shared by link. They are read and checked in `src/lib/rules.ts` (`parseDayParam`, `parsePersonParam`, `parseFlagParam`, `filterReports`, `groupByDay`, `dayCounts`, `workHref`) and are tested there. Each person has a fixed chart colour (`PERSON_SERIES` in `constants.ts`, `--series-1..3` in `globals.css`: blue, orange, violet). Green/yellow/red stay for status only.
 
 ## Layers
 
@@ -32,7 +45,8 @@ All tables have `id` (uuid), `created_at`, `updated_at`. Defined in `src/server/
 | Table | Purpose | Notes |
 | --- | --- | --- |
 | `people` | The team: `slug` (`khashayar`, `mahan`, `hossein`), `name`, `active` | Created by the migration step, so a fresh deployment works before seeding. |
-| `daily_reports` | `person_id`, `report_date`, `title`, `summary`, `done[]`, `blockers[]`, `next[]` | Unique on (person, date). Saving again **replaces** it. |
+| `daily_reports` | `person_id`, `report_date`, `title`, `project` (optional), `summary`, `done[]`, `blockers[]`, `next[]` | Unique on (person, date). Saving again **replaces** it. |
+| `report_reviews` | `person_id`, `report_date`, `seen_at`, `note`, `note_at` | The CEO's "seen" mark and note on one report. Unique on (person, date). Kept apart from `daily_reports` so replacing a report does not wipe it. A report changed after it was seen says so. |
 | `weekly_reports` | `week_start` (unique Saturday), `one_line`, `results[]`, `by_person` (jsonb), `waiting_decisions[]`, `not_finished[]`, `numbers` (jsonb), `label`, `due_at`, `done` | `numbers` and `waiting_decisions` are computed when saving, never typed. `done` means "final". |
 | `decisions` | `title`, `description`, `status` (open/answered), `raised_on`, `raised_by`, `answered_on`, `answer` | `raised_by` is a person slug or `team`. Answered at most once. |
 | `api_tokens` | `owner` (person or `team`), `name`, `scopes[]`, `hash`, `prefix`, `last_used_at`, `revoked_at` | Only the SHA-256 hash is stored. The plain token is shown once. |
@@ -125,4 +139,5 @@ The database tests empty every table of `TEST_DATABASE_URL` and refuse to run if
 
 - Login attempts on the website are slowed, not locked out.
 - Agent rate limits are counted per server instance, so on Vercel they are not a hard global limit.
-- There is no read-only login for the CEO and no management summary view yet.
+- The CEO has no personal account: the CEO password is shared by whoever knows it, and the audit log says "ceo".
+- The weekly email cannot be tested end to end without a Resend account; `/api/digest?dry=1` shows exactly what would be sent.
